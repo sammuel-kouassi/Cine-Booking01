@@ -2,6 +2,7 @@ package com.example.cine_booking.service;
 
 
 
+import com.example.cine_booking.dto.BookingSummaryDto;
 import com.example.cine_booking.exception.BusinessException;
 import com.example.cine_booking.model.*;
 import com.example.cine_booking.model.enums.BookingStatus;
@@ -77,5 +78,65 @@ public class BookingService {
 
         ///  6. Sauvegarde (Cascade va sauvegarder les BookingSeats aussi)
         return bookingRepository.save(booking);
+    }
+
+    // ... imports et méthode createBooking existante
+
+    // Lecture des réservations
+    public List<BookingSummaryDto> getMyBookings(String userEmail) {
+        return bookingRepository.findByUser_EmailOrderByBookingTimeDesc(userEmail)
+                .stream()
+                .map(this::convertToSummaryDto)
+                .toList();
+    }
+
+    // Annulation
+    @Transactional
+    public void cancelBooking(Long bookingId, String userEmail) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new BusinessException("Réservation introuvable"));
+
+        // 1. Vérification de la propriété (Sécurité)
+        if (!booking.getUser().getEmail().equals(userEmail)) {
+            throw new BusinessException("Vous n'êtes pas autorisé à annuler cette réservation");
+        }
+
+        // 2. Vérification du statut actuel
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            throw new BusinessException("Cette réservation est déjà annulée");
+        }
+
+        // 3. Vérification de l'heure (Règle Métier)
+        if (booking.getScreening().getStartTime().isBefore(LocalDateTime.now())) {
+            throw new BusinessException("Il est trop tard pour annuler, la séance a commencé/est passée");
+        }
+
+        // 4. Action
+        booking.setStatus(BookingStatus.CANCELLED);
+        bookingRepository.save(booking);
+
+        // Note : Grâce à la logique dans getScreeningSeats(),
+        // les sièges de cette réservation redeviendront automatiquement "AVAILABLE"
+        // car la requête SQL filtre sur status != CANCELLED.
+    }
+
+    // Mapper utilitaire (Entity -> DTO)
+    private BookingSummaryDto convertToSummaryDto(Booking booking) {
+        // Transformation de la liste des objets Seats en liste de Strings "A1", "A2"
+        List<String> seatLabels = booking.getSeats().stream()
+                .map(bs -> bs.getSeat().getRowCode() + bs.getSeat().getNumber())
+                .sorted()
+                .toList();
+
+        return new BookingSummaryDto(
+                booking.getId(),
+                booking.getScreening().getMovie().getTitle(),
+                booking.getScreening().getMovie().getPosterUrl(),
+                booking.getScreening().getCinemaHall().getName(),
+                booking.getScreening().getStartTime(),
+                seatLabels,
+                booking.getTotalAmount(),
+                booking.getStatus().name()
+        );
     }
 }

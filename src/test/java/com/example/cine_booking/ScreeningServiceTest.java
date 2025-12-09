@@ -2,14 +2,15 @@ package com.example.cine_booking;
 
 
 import com.example.cine_booking.dto.ScreeningRequest;
+import com.example.cine_booking.dto.SeatDto;
 import com.example.cine_booking.exception.BusinessException;
 import com.example.cine_booking.model.CinemaHall;
 import com.example.cine_booking.model.Movie;
 import com.example.cine_booking.model.Screening;
+import com.example.cine_booking.model.Seat;
+import com.example.cine_booking.repository.*;
 import com.example.cine_booking.service.ScreeningService;
-import com.example.cine_booking.repository.CinemaHallRepository;
-import com.example.cine_booking.repository.MovieRepository;
-import com.example.cine_booking.repository.ScreeningRepository;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -21,8 +22,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -88,5 +88,46 @@ class ScreeningServiceTest {
         );
         assertTrue(ex.getMessage().contains("chevauche"));
         verify(screeningRepository, never()).save(any());
+    }
+
+    @Mock private BookingSeatRepository bookingSeatRepository; // À ajouter
+    @Mock private SeatRepository seatRepository; // À ajouter si pas déjà là
+
+    @Test
+    void should_GetScreeningSeats_WithCorrectStatus() {
+        // --- GIVEN ---
+        Long screeningId = 100L;
+        Long hallId = 50L;
+
+        // 1. Configuration de la séance et de la salle
+        CinemaHall hall = CinemaHall.builder().id(hallId).build();
+        Screening screening = Screening.builder().id(screeningId).cinemaHall(hall).build();
+
+        when(screeningRepository.findById(screeningId)).thenReturn(Optional.of(screening));
+
+        // 2. Configuration des sièges physiques (La salle a 2 sièges)
+        Seat seat1 = Seat.builder().id(10L).rowCode("A").number(1).build();
+        Seat seat2 = Seat.builder().id(11L).rowCode("A").number(2).build();
+
+        // Simuler la récupération des sièges de cette salle
+        when(seatRepository.findAllByCinemaHallId(hallId)).thenReturn(List.of(seat1, seat2));
+
+        // 3. Configuration des réservations (Le siège 10 est DÉJÀ pris)
+        when(bookingSeatRepository.findReservedSeatIdsByScreeningId(screeningId))
+                .thenReturn(List.of(10L));
+
+        // --- WHEN ---
+        List<SeatDto> result = screeningService.getScreeningSeats(screeningId);
+
+        // --- THEN ---
+        assertEquals(2, result.size());
+
+        // Le siège 10 doit être BOOKED
+        SeatDto dto1 = result.stream().filter(s -> s.id().equals(10L)).findFirst().orElseThrow();
+        assertEquals("BOOKED", dto1.status());
+
+        // Le siège 11 doit être AVAILABLE
+        SeatDto dto2 = result.stream().filter(s -> s.id().equals(11L)).findFirst().orElseThrow();
+        assertEquals("AVAILABLE", dto2.status());
     }
 }

@@ -108,9 +108,7 @@ class BookingServiceTest {
         // --- WHEN & THEN (Action & Vérification de l'exception) ---
 
         // On s'attend à ce que le code lance une BusinessException
-        BusinessException exception = assertThrows(BusinessException.class, () -> {
-            bookingService.createBooking(userId, screeningId, requestedSeatIds);
-        });
+        BusinessException exception = assertThrows(BusinessException.class, () -> bookingService.createBooking(userId, screeningId, requestedSeatIds));
 
         // Vérification du message d'erreur (optionnel, mais recommandé)
         assertTrue(exception.getMessage().contains("déjà réservé"));
@@ -120,5 +118,78 @@ class BookingServiceTest {
         // On vérifie que le service n'a JAMAIS appelé la sauvegarde.
         // C'est vital : on ne veut pas de réservation corrompue en base.
         verify(bookingRepository, never()).save(any());
+    }
+
+    @Test
+    void should_CancelBooking_Successfully() {
+        // GIVEN
+        String currentUserEmail = "me@test.com";
+        User me = User.builder().email(currentUserEmail).build();
+
+        // Une séance dans le futur (Demain)
+        Screening futureScreening = Screening.builder()
+                .startTime(LocalDateTime.now().plusDays(1))
+                .build();
+
+        Booking booking = Booking.builder()
+                .id(99L)
+                .user(me) // La réservation m'appartient
+                .screening(futureScreening)
+                .status(BookingStatus.CONFIRMED)
+                .build();
+
+        when(bookingRepository.findById(99L)).thenReturn(Optional.of(booking));
+
+        // WHEN
+        bookingService.cancelBooking(99L, currentUserEmail);
+
+        // THEN
+        assertEquals(BookingStatus.CANCELLED, booking.getStatus());
+        // Vérifie qu'on a bien sauvegardé le changement d'état
+        verify(bookingRepository).save(booking);
+    }
+
+    @Test
+    void should_Throw_When_CancellingOtherUserBooking() {
+        // GIVEN
+        String hackerEmail = "hacker@test.com";
+        User owner = User.builder().email("owner@test.com").build();
+
+        Booking booking = Booking.builder().id(99L).user(owner).build();
+
+        when(bookingRepository.findById(99L)).thenReturn(Optional.of(booking));
+
+        // WHEN & THEN
+        BusinessException ex = assertThrows(BusinessException.class, () ->
+                bookingService.cancelBooking(99L, hackerEmail)
+        );
+        assertTrue(ex.getMessage().contains("pas autorisé"));
+    }
+
+    @Test
+    void should_Throw_When_ScreeningIsPast() {
+        // GIVEN
+        String myEmail = "me@test.com";
+        User me = User.builder().email(myEmail).build();
+
+        // Séance passée (Hier)
+        Screening pastScreening = Screening.builder()
+                .startTime(LocalDateTime.now().minusDays(1))
+                .build();
+
+        Booking booking = Booking.builder()
+                .id(99L)
+                .user(me)
+                .screening(pastScreening)
+                .status(BookingStatus.CONFIRMED)
+                .build();
+
+        when(bookingRepository.findById(99L)).thenReturn(Optional.of(booking));
+
+        // WHEN & THEN
+        BusinessException ex = assertThrows(BusinessException.class, () ->
+                bookingService.cancelBooking(99L, myEmail)
+        );
+        assertTrue(ex.getMessage().contains("trop tard"));
     }
 }

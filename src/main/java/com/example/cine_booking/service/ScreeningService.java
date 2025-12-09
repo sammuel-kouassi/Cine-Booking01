@@ -2,13 +2,13 @@ package com.example.cine_booking.service;
 
 
 import com.example.cine_booking.dto.ScreeningRequest;
+import com.example.cine_booking.dto.SeatDto;
 import com.example.cine_booking.exception.BusinessException;
 import com.example.cine_booking.model.CinemaHall;
 import com.example.cine_booking.model.Movie;
 import com.example.cine_booking.model.Screening;
-import com.example.cine_booking.repository.CinemaHallRepository;
-import com.example.cine_booking.repository.MovieRepository;
-import com.example.cine_booking.repository.ScreeningRepository;
+import com.example.cine_booking.model.Seat;
+import com.example.cine_booking.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +23,8 @@ public class ScreeningService {
     private final ScreeningRepository screeningRepository;
     private final MovieRepository movieRepository;
     private final CinemaHallRepository hallRepository;
+    private final SeatRepository seatRepository;
+    private final BookingSeatRepository bookingSeatRepository;
 
     @Transactional
     public Screening addScreening(ScreeningRequest request) {
@@ -66,4 +68,30 @@ public class ScreeningService {
 
         return screeningRepository.save(screening);
     }
+
+    public List<SeatDto> getScreeningSeats(Long screeningId) {
+        // 1. Récupérer la séance pour connaître la salle
+        Screening screening = screeningRepository.findById(screeningId)
+                .orElseThrow(() -> new BusinessException("Séance introuvable"));
+
+        // 2. Récupérer TOUS les sièges de la salle (Structure physique)
+        List<Seat> allSeats = seatRepository.findAllByCinemaHallId(screening.getCinemaHall().getId());
+
+        // 3. Récupérer les IDs des sièges réservés (État actuel)
+        List<Long> reservedSeatIds = bookingSeatRepository.findReservedSeatIdsByScreeningId(screeningId);
+
+        // 4. Fusionner les deux listes (Mapping)
+        return allSeats.stream()
+                .map(seat -> {
+                    boolean isReserved = reservedSeatIds.contains(seat.getId());
+                    return new SeatDto(
+                            seat.getId(),
+                            seat.getRowCode(),
+                            seat.getNumber(),
+                            isReserved ? "BOOKED" : "AVAILABLE"
+                    );
+                })
+                .toList();
+    }
+
 }
