@@ -38,8 +38,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         final String jwt;
         final String userEmail;
 
-        // 1. Vérifier la présence du header Bearer
-        if (authHeader == null || !authHeader.startsWith("Bearer")) {
+        // 1. Vérifier la présence du header Bearer (avec espace)
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }

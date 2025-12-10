@@ -29,15 +29,15 @@ public class DataInitializer implements CommandLineRunner {
     @Transactional
     public void run(String... args) throws Exception {
         // 1. Créer l'ADMIN s'il n'existe pas
-        if (userRepository.findByEmail("admin@cine.com").isEmpty()) {
+        if (userRepository.findByEmail("admin@gmail.com").isEmpty()) {
             User admin = User.builder()
                     .fullName("Super Admin")
-                    .email("admin@cine.com")
+                    .email("admin@gmail.com")
                     .password(passwordEncoder.encode("admin123")) // Mot de passe par défaut
                     .roles(Set.of(UserRole.ADMIN, UserRole.CUSTOMER))
                     .build();
             userRepository.save(admin);
-            System.out.println(">>> ADMIN INITIAL CRÉÉ : admin@cine.com / admin123");
+            System.out.println(">>> ADMIN INITIAL CRÉÉ : admin@gmail.com / admin123");
         }
 
         // 2. Créer une Salle et ses Sièges (Infrastructure)
